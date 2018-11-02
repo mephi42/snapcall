@@ -89,8 +89,38 @@ fn printf_format(t: &Type) -> &'static str {
         TypeKind::Int => "%d",
         TypeKind::Long => "%ld",
         TypeKind::LongLong => "%lld",
+        TypeKind::Float => "%f",
         TypeKind::Pointer => "%s",
         _ => panic!("Unsupported type: {:?}", t)
+    }
+}
+
+fn handle_arg<'tu>(
+    locals: &mut Vec<Var<'tu>>,
+    assignments: &mut Vec<Assignment<'tu>>,
+    arg_type: &Type<'tu>,
+    arg_name: &str,
+    arg_value: &str,
+) {
+    locals.push(Var {
+        name: arg_name.clone().to_string(),
+        tpe: arg_type.clone(),
+    });
+    if arg_type.get_kind() == TypeKind::Pointer {
+        let val_name = format!("{}_val", &arg_name);
+        let val_type = arg_type.get_pointee_type().expect("Pointer without pointee");
+        handle_arg(locals, assignments, &val_type, &val_name, &format!("*{}", &arg_value));
+        assignments.push(Assignment {
+            lhs: arg_name.clone().to_string(),
+            tpe: arg_type.clone(),
+            rhs: format!("\"&{}\"", &val_name),
+        });
+    } else {
+        assignments.push(Assignment {
+            lhs: arg_name.clone().to_string(),
+            tpe: arg_type.clone(),
+            rhs: arg_value.clone().to_string(),
+        });
     }
 }
 
@@ -100,34 +130,7 @@ fn handle_args<'tu>(
     args: &Args<'tu>,
 ) {
     for (arg_type, arg_name) in args {
-        locals.push(Var {
-            name: arg_name.clone(),
-            tpe: arg_type.clone(),
-        });
-        if arg_type.get_kind() == TypeKind::Pointer {
-            let val_name = format!("{}_val", &arg_name);
-            let val_type = arg_type.get_pointee_type().expect("Pointer without pointee");
-            locals.push(Var {
-                name: val_name.clone(),
-                tpe: val_type.clone(),
-            });
-            assignments.push(Assignment {
-                lhs: val_name.clone(),
-                tpe: val_type.clone(),
-                rhs: format!("*{}", &arg_name),
-            });
-            assignments.push(Assignment {
-                lhs: arg_name.clone(),
-                tpe: arg_type.clone(),
-                rhs: format!("\"&{}\"", &val_name),
-            });
-        } else {
-            assignments.push(Assignment {
-                lhs: arg_name.clone(),
-                tpe: arg_type.clone(),
-                rhs: arg_name.clone(),
-            });
-        }
+        handle_arg(locals, assignments, arg_type, arg_name, arg_name)
     }
 }
 

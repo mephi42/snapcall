@@ -25,6 +25,11 @@ mod test {
         test("test0003");
     }
 
+    #[test]
+    fn test0004() {
+        test("test0004");
+    }
+
     fn cat(h: &mut File, h_path: &Path) {
         h.seek(SeekFrom::Start(0)).expect("seek() failed");
         let h_path_str = h_path.to_str().expect("to_str() failed");
@@ -65,12 +70,16 @@ mod test {
             .expect("Could not start clang");
         assert!(clang_main.wait().expect("Could not wait for clang").success());
         let r_path = work.path().join(format!("{}-replay.h", id));
-        let r = File::create(&r_path).expect(&format!("Could not create {:?}", &r_path));
+        let r = File::create(&r_path)
+            .expect(&format!("Could not create {:?}", &r_path));
         let mut main = Command::new(&main_path)
             .stdout(Stdio::from(r))
             .spawn()
             .expect("Could not start main");
         assert!(main.wait().expect("Could not wait for main").success());
+        let mut r_again = File::open(&r_path)
+            .expect(&format!("Could not open {:?}", &r_path));
+        cat(&mut r_again, &r_path);
 
         let replay_path = work.path().join("replay");
         let mut clang_replay = Command::new("clang")
