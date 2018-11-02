@@ -86,6 +86,7 @@ fn assign_all(out: &mut Write, assignments: &Vec<Assignment>) -> Result {
 
 fn printf_format(t: &Type) -> &'static str {
     match t.get_kind() {
+        TypeKind::CharS => "%c",
         TypeKind::Int => "%d",
         TypeKind::Long => "%ld",
         TypeKind::LongLong => "%lld",
@@ -242,13 +243,14 @@ fn check_filter(entity: Entity, filter: Option<&str>) -> bool {
     }
 }
 
-pub fn generate(out: &mut Write, path: &Path, filter: Option<&str>) -> Result {
-    write!(out, "#include <stdio.h>\n\n")?;
+pub fn generate(out: &mut Write, path: &Path, filter: Option<&str>, cflags: Vec<&str>) -> Result {
     let clang = CLANG.lock().unwrap();
     let index: Index = Index::new(&clang, false, true);
-    let parser: Parser = index.parser(path);
+    let mut parser: Parser = index.parser(path);
+    parser.arguments(&cflags);
     let unit: TranslationUnit = parser.parse()?;
     let unit_entity: Entity = unit.get_entity();
+    write!(out, "#include <stdio.h>\n\n")?;
     visit_children(&unit_entity, EntityVisitResult::Continue, |unit_child: Entity| {
         match unit_child.get_kind() {
             EntityKind::FunctionDecl => {

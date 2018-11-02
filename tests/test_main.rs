@@ -49,7 +49,7 @@ mod test {
             .open(&h_path)
             .expect(&format!("Could not create {:?}", &h_path));
         let c_path = test_path(&format!("{}.c", id));
-        match generate(&mut h, &c_path) {
+        match generate(&mut h, &c_path, None, vec!()) {
             Ok(_) => {}
             Err(x) => panic!(x)
         }
