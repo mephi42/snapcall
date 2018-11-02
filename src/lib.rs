@@ -90,6 +90,7 @@ fn printf_format(t: &Type) -> &'static str {
         TypeKind::Long => "%ld",
         TypeKind::LongLong => "%lld",
         TypeKind::Float => "%f",
+        TypeKind::Double => "%lf",
         TypeKind::Pointer => "%s",
         _ => panic!("Unsupported type: {:?}", t)
     }
@@ -100,26 +101,44 @@ fn handle_arg<'tu>(
     assignments: &mut Vec<Assignment<'tu>>,
     arg_type: &Type<'tu>,
     arg_name: &str,
-    arg_value: &str,
+    arg_val: &str,
+    need_local: bool,
 ) {
-    locals.push(Var {
-        name: arg_name.clone().to_string(),
-        tpe: arg_type.clone(),
-    });
+    if arg_type.get_kind() == TypeKind::Elaborated {
+        let val_type = arg_type.get_elaborated_type()
+            .expect("Elaborated type without elaboratee");
+        return handle_arg(locals, assignments, &val_type, arg_name, arg_val, true);
+    }
+    if need_local {
+        locals.push(Var {
+            name: arg_name.clone().to_string(),
+            tpe: arg_type.clone(),
+        });
+    }
     if arg_type.get_kind() == TypeKind::Pointer {
         let val_name = format!("{}_val", &arg_name);
         let val_type = arg_type.get_pointee_type().expect("Pointer without pointee");
-        handle_arg(locals, assignments, &val_type, &val_name, &format!("*{}", &arg_value));
+        let val = format!("(*{})", &arg_val);
+        handle_arg(locals, assignments, &val_type, &val_name, &val, true);
         assignments.push(Assignment {
             lhs: arg_name.clone().to_string(),
             tpe: arg_type.clone(),
-            rhs: format!("\"&{}\"", &val_name),
+            rhs: format!("\"(&{})\"", &val_name),
         });
+    } else if arg_type.get_kind() == TypeKind::Record {
+        let fields = arg_type.get_fields().expect("Record without fields");
+        for field in fields {
+            let field_name = field.get_name().expect("Field without a name");
+            let field_type = field.get_type().expect("Field without a type");
+            let field_expr = format!("{}.{}", &arg_name, &field_name);
+            let field_val = format!("{}.{}", &arg_val, &field_name);
+            handle_arg(locals, assignments, &field_type, &field_expr, &field_val, false);
+        }
     } else {
         assignments.push(Assignment {
             lhs: arg_name.clone().to_string(),
             tpe: arg_type.clone(),
-            rhs: arg_value.clone().to_string(),
+            rhs: arg_val.clone().to_string(),
         });
     }
 }
@@ -130,7 +149,7 @@ fn handle_args<'tu>(
     args: &Args<'tu>,
 ) {
     for (arg_type, arg_name) in args {
-        handle_arg(locals, assignments, arg_type, arg_name, arg_name)
+        handle_arg(locals, assignments, arg_type, arg_name, arg_name, true);
     }
 }
 

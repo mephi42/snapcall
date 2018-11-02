@@ -30,6 +30,11 @@ mod test {
         test("test0004");
     }
 
+    #[test]
+    fn test0005() {
+        test("test0005");
+    }
+
     fn cat(h: &mut File, h_path: &Path) {
         h.seek(SeekFrom::Start(0)).expect("seek() failed");
         let h_path_str = h_path.to_str().expect("to_str() failed");
