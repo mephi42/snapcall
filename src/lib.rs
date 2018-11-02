@@ -232,7 +232,17 @@ lazy_static! {
     static ref CLANG: Mutex<Clang> = Mutex::new(Clang::new().expect("Clang::new() failed"));
 }
 
-pub fn generate(out: &mut Write, path: &Path) -> Result {
+fn check_filter(entity: Entity, filter: Option<&str>) -> bool {
+    match filter {
+        Some(filter) => match entity.get_name() {
+            Some(name) => filter == name,
+            None => false,
+        }
+        None => true,
+    }
+}
+
+pub fn generate(out: &mut Write, path: &Path, filter: Option<&str>) -> Result {
     write!(out, "#include <stdio.h>\n\n")?;
     let clang = CLANG.lock().unwrap();
     let index: Index = Index::new(&clang, false, true);
@@ -243,7 +253,9 @@ pub fn generate(out: &mut Write, path: &Path) -> Result {
         match unit_child.get_kind() {
             EntityKind::FunctionDecl => {
                 if unit_child.get_definition() == Some(unit_child) {
-                    generate_function(out, unit_child)?;
+                    if check_filter(unit_child, filter) {
+                        generate_function(out, unit_child)?;
+                    }
                 }
             }
             _ => {}

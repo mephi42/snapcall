@@ -13,7 +13,11 @@ fn main() {
         .arg(Arg::with_name("INPUT")
             .required(true)
             .index(1))
+        .arg(Arg::with_name("filter")
+            .long("filter")
+            .takes_value(true))
         .get_matches();
     let input = matches.value_of("INPUT").unwrap();
-    generate(&mut std::io::stdout(), Path::new(input)).expect("Error");
+    let filter = matches.value_of("filter");
+    generate(&mut std::io::stdout(), Path::new(input), filter).expect("Error");
 }
