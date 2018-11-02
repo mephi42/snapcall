@@ -11,29 +11,22 @@ mod test {
     use tempfile::TempDir;
 
     #[test]
-    fn test0001() {
-        test("test0001");
-    }
+    fn test0001() { test("test0001"); }
 
     #[test]
-    fn test0002() {
-        test("test0002");
-    }
+    fn test0002() { test("test0002"); }
 
     #[test]
-    fn test0003() {
-        test("test0003");
-    }
+    fn test0003() { test("test0003"); }
 
     #[test]
-    fn test0004() {
-        test("test0004");
-    }
+    fn test0004() { test("test0004"); }
 
     #[test]
-    fn test0005() {
-        test("test0005");
-    }
+    fn test0005() { test("test0005"); }
+
+    #[test]
+    fn test0006() { test("test0006"); }
 
     fn cat(h: &mut File, h_path: &Path) {
         h.seek(SeekFrom::Start(0)).expect("seek() failed");

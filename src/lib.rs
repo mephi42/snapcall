@@ -91,6 +91,7 @@ fn printf_format(t: &Type) -> &'static str {
         TypeKind::LongLong => "%lld",
         TypeKind::Float => "%f",
         TypeKind::Double => "%lf",
+        TypeKind::UInt => "%u",
         TypeKind::Pointer => "%s",
         _ => panic!("Unsupported type: {:?}", t)
     }
@@ -115,7 +116,12 @@ fn handle_arg<'tu>(
             tpe: arg_type.clone(),
         });
     }
-    if arg_type.get_kind() == TypeKind::Pointer {
+    if arg_type.get_kind() == TypeKind::Typedef {
+        let val_type = arg_type
+            .get_declaration().expect("Typedef without declaration")
+            .get_typedef_underlying_type().expect("Typedef without underlying type");
+        return handle_arg(locals, assignments, &val_type, arg_name, arg_val, false);
+    } else if arg_type.get_kind() == TypeKind::Pointer {
         let val_name = format!("{}_val", &arg_name);
         let val_type = arg_type.get_pointee_type().expect("Pointer without pointee");
         let val = format!("(*{})", &arg_val);
