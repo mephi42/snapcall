@@ -36,9 +36,11 @@ impl From<String> for Error {
 
 type Result = std::result::Result<(), Error>;
 
-fn visit_children<F: FnMut(Entity) -> Result>(entity: &Entity,
-                                              recurse: EntityVisitResult,
-                                              mut f: F) -> Result {
+fn visit_children<'tu, F: FnMut(Entity<'tu>) -> Result>(
+    entity: &Entity<'tu>,
+    recurse: EntityVisitResult,
+    mut f: F,
+) -> Result {
     let mut result: Result = Ok(());
     entity.visit_children(|x, _| {
         match f(x) {
@@ -55,43 +57,103 @@ fn visit_children<F: FnMut(Entity) -> Result>(entity: &Entity,
 type Arg<'tu> = (Type<'tu>, String);
 type Args<'tu> = Vec<Arg<'tu>>;
 
+struct Var<'tu> {
+    name: String,
+    tpe: Type<'tu>,
+}
+
+fn declare_locals(out: &mut Write, locals: &Vec<Var>) -> Result {
+    for local in locals {
+        write!(out, "    fprintf(stream, \"    {} {};\\n\");\n",
+               local.tpe.get_display_name(), local.name)?;
+    }
+    Ok(())
+}
+
+struct Assignment<'tu> {
+    lhs: String,
+    tpe: Type<'tu>,
+    rhs: String,
+}
+
+fn assign_all(out: &mut Write, assignments: &Vec<Assignment>) -> Result {
+    for a in assignments {
+        write!(out, "    fprintf(stream, \"    {} = {};\\n\", {});\n",
+               a.lhs, printf_format(&a.tpe), a.rhs)?;
+    }
+    Ok(())
+}
+
 fn printf_format(t: &Type) -> &'static str {
     match t.get_kind() {
         TypeKind::Int => "%d",
         TypeKind::Long => "%ld",
-        _ => panic!("Unsupported type")
+        TypeKind::LongLong => "%lld",
+        TypeKind::Pointer => "%s",
+        _ => panic!("Unsupported type: {:?}", t)
     }
 }
 
-fn generate_args(out: &mut Write, args: &Args) -> Result {
+fn handle_args<'tu>(
+    locals: &mut Vec<Var<'tu>>,
+    assignments: &mut Vec<Assignment<'tu>>,
+    args: &Args<'tu>,
+) {
     for (arg_type, arg_name) in args {
-        write!(out, "    fprintf(stream, \"    {} {} = {};\\n\", {});\n",
-               arg_type.get_display_name(), arg_name, printf_format(&arg_type), arg_name)?;
+        locals.push(Var {
+            name: arg_name.clone(),
+            tpe: arg_type.clone(),
+        });
+        if arg_type.get_kind() == TypeKind::Pointer {
+            let val_name = format!("{}_val", &arg_name);
+            let val_type = arg_type.get_pointee_type().expect("Pointer without pointee");
+            locals.push(Var {
+                name: val_name.clone(),
+                tpe: val_type.clone(),
+            });
+            assignments.push(Assignment {
+                lhs: val_name.clone(),
+                tpe: val_type.clone(),
+                rhs: format!("*{}", &arg_name),
+            });
+            assignments.push(Assignment {
+                lhs: arg_name.clone(),
+                tpe: arg_type.clone(),
+                rhs: format!("\"&{}\"", &val_name),
+            });
+        } else {
+            assignments.push(Assignment {
+                lhs: arg_name.clone(),
+                tpe: arg_type.clone(),
+                rhs: arg_name.clone(),
+            });
+        }
     }
-    Ok(())
 }
 
 fn is_global(entity: &Entity) -> bool {
     entity.get_kind() == EntityKind::VarDecl && entity.get_linkage() == Some(Linkage::External)
 }
 
-fn generate_globals(out: &mut Write, function: &Entity) -> Result {
-    visit_children(function, EntityVisitResult::Recurse, |entity| {
+fn handle_globals<'tu>(assignments: &mut Vec<Assignment<'tu>>, function: &Entity<'tu>) {
+    function.visit_children(|entity, _| {
         if entity.get_kind() == EntityKind::DeclRefExpr {
             match entity.get_reference() {
                 Some(def) =>
                     if is_global(&def) {
                         let var_name = def.get_name().expect("Global without a name");
                         let var_type = def.get_type().expect("Global without a type");
-                        write!(out, "    fprintf(stream, \"    {} = {};\\n\", {});\n",
-                               var_name, printf_format(&var_type), var_name)?;
+                        assignments.push(Assignment {
+                            lhs: var_name.clone(),
+                            tpe: var_type.clone(),
+                            rhs: var_name.clone(),
+                        });
                     }
                 None => {}
             }
         }
-        Ok(())
-    })?;
-    Ok(())
+        EntityVisitResult::Recurse
+    });
 }
 
 fn generate_call(out: &mut Write, function_name: &str, args: &Args) -> Result {
@@ -126,8 +188,12 @@ fn generate_function(out: &mut Write, function: Entity) -> Result {
     let ret = function.get_result_type().expect("Function without result type");
     write!(out, "    fprintf(stream, \"static inline {} replay_{}_%d(void) {{\\n\", ++counter);\n",
            ret.get_display_name(), function_name)?;
-    generate_args(out, &args)?;
-    generate_globals(out, &function)?;
+    let mut locals = Vec::new();
+    let mut assignments = Vec::new();
+    handle_args(&mut locals, &mut assignments, &args);
+    handle_globals(&mut assignments, &function);
+    declare_locals(out, &locals)?;
+    assign_all(out, &assignments)?;
     generate_call(out, &function_name, &args)?;
     write!(out, "    fprintf(stream, \"}}\\n\");\n")?;
     write!(out, "}}\n")?;

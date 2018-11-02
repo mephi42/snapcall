@@ -4,8 +4,8 @@ extern crate tempfile;
 #[cfg(test)]
 mod test {
     use snapcall::generate;
-    use std::fs::File;
-    use std::io::Write;
+    use std::fs::{File, OpenOptions};
+    use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
     use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
     use tempfile::TempDir;
@@ -20,17 +20,38 @@ mod test {
         test("test0002");
     }
 
+    #[test]
+    fn test0003() {
+        test("test0003");
+    }
+
+    fn cat(h: &mut File, h_path: &Path) {
+        h.seek(SeekFrom::Start(0)).expect("seek() failed");
+        let h_path_str = h_path.to_str().expect("to_str() failed");
+        println!("--- BEGIN {} ---", &h_path_str);
+        for line in BufReader::new(h).lines() {
+            println!("{}", line.expect("lines() failed"));
+        }
+        println!("--- END {} ---", &h_path_str);
+    }
+
     fn test(id: &str) {
         let work = TempDir::new().expect("TempDir::new() failed");
 
         let h_path = work.path().join(format!("{}-snapshot.h", id));
-        let mut h = File::create(&h_path).expect(&format!("Could not create {:?}", &h_path));
+        let mut h = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(&h_path)
+            .expect(&format!("Could not create {:?}", &h_path));
         let c_path = test_path(&format!("{}.c", id));
         match generate(&mut h, &c_path) {
             Ok(_) => {}
             Err(x) => panic!(x)
         }
         h.flush().expect("flush() failed");
+        cat(&mut h, &h_path);
 
         let main_path = work.path().join("main");
         let mut clang_main = Command::new("clang")
