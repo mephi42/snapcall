@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include "test0001.h"
 #include "test0001-snapshot.h"
 
 int main() {

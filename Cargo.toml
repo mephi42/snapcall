@@ -6,6 +6,7 @@ authors = ["mephi42 <mephi42@gmail.com>"]
 [dependencies]
 clang = { version = "0.20.0", features = ["clang_6_0"] }
 clap = "2.32.0"
+lazy_static = "1.1.0"
 
 [lib]
 name = "snapcall"

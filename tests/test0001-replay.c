@@ -1,12 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "test.h"
 #include "test0001.h"
 #include "test0001-replay.h"
 
 int main() {
-    if (replay_foo_1() != 388)
-        return EXIT_FAILURE;
-    if (replay_foo_2() != 6176)
-        return EXIT_FAILURE;
+    ASSERT_EQ(388, replay_foo_1());
+    ASSERT_EQ(6176, replay_foo_2());
 }

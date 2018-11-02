@@ -1,10 +1,13 @@
 extern crate clang;
+#[macro_use]
+extern crate lazy_static;
 
-use clang::{Clang, Entity, EntityKind, EntityVisitResult, Index, Parser, SourceError,
+use clang::{Clang, Entity, EntityKind, EntityVisitResult, Index, Linkage, Parser, SourceError,
             TranslationUnit, Type, TypeKind};
 use std::io;
 use std::io::Write;
 use std::path::Path;
+use std::sync::Mutex;
 
 #[derive(Debug)]
 pub enum Error {
@@ -33,11 +36,13 @@ impl From<String> for Error {
 
 type Result = std::result::Result<(), Error>;
 
-fn visit_children<F: FnMut(Entity) -> Result>(entity: &Entity, mut f: F) -> Result {
+fn visit_children<F: FnMut(Entity) -> Result>(entity: &Entity,
+                                              recurse: EntityVisitResult,
+                                              mut f: F) -> Result {
     let mut result: Result = Ok(());
     entity.visit_children(|x, _| {
         match f(x) {
-            Ok(()) => EntityVisitResult::Continue,
+            Ok(()) => recurse,
             err @ Err(_) => {
                 result = err;
                 EntityVisitResult::Break
@@ -53,6 +58,7 @@ type Args<'tu> = Vec<Arg<'tu>>;
 fn printf_format(t: &Type) -> &'static str {
     match t.get_kind() {
         TypeKind::Int => "%d",
+        TypeKind::Long => "%ld",
         _ => panic!("Unsupported type")
     }
 }
@@ -62,6 +68,29 @@ fn generate_args(out: &mut Write, args: &Args) -> Result {
         write!(out, "    fprintf(stream, \"    {} {} = {};\\n\", {});\n",
                arg_type.get_display_name(), arg_name, printf_format(&arg_type), arg_name)?;
     }
+    Ok(())
+}
+
+fn is_global(entity: &Entity) -> bool {
+    entity.get_kind() == EntityKind::VarDecl && entity.get_linkage() == Some(Linkage::External)
+}
+
+fn generate_globals(out: &mut Write, function: &Entity) -> Result {
+    visit_children(function, EntityVisitResult::Recurse, |entity| {
+        if entity.get_kind() == EntityKind::DeclRefExpr {
+            match entity.get_reference() {
+                Some(def) =>
+                    if is_global(&def) {
+                        let var_name = def.get_name().expect("Global without a name");
+                        let var_type = def.get_type().expect("Global without a type");
+                        write!(out, "    fprintf(stream, \"    {} = {};\\n\", {});\n",
+                               var_name, printf_format(&var_type), var_name)?;
+                    }
+                None => {}
+            }
+        }
+        Ok(())
+    })?;
     Ok(())
 }
 
@@ -98,20 +127,25 @@ fn generate_function(out: &mut Write, function: Entity) -> Result {
     write!(out, "    fprintf(stream, \"static inline {} replay_{}_%d(void) {{\\n\", ++counter);\n",
            ret.get_display_name(), function_name)?;
     generate_args(out, &args)?;
+    generate_globals(out, &function)?;
     generate_call(out, &function_name, &args)?;
     write!(out, "    fprintf(stream, \"}}\\n\");\n")?;
     write!(out, "}}\n")?;
     Ok(())
 }
 
+lazy_static! {
+    static ref CLANG: Mutex<Clang> = Mutex::new(Clang::new().expect("Clang::new() failed"));
+}
+
 pub fn generate(out: &mut Write, path: &Path) -> Result {
     write!(out, "#include <stdio.h>\n\n")?;
-    let clang: Clang = Clang::new()?;
+    let clang = CLANG.lock().unwrap();
     let index: Index = Index::new(&clang, false, true);
     let parser: Parser = index.parser(path);
     let unit: TranslationUnit = parser.parse()?;
     let unit_entity: Entity = unit.get_entity();
-    visit_children(&unit_entity, |unit_child: Entity| {
+    visit_children(&unit_entity, EntityVisitResult::Continue, |unit_child: Entity| {
         match unit_child.get_kind() {
             EntityKind::FunctionDecl => {
                 if unit_child.get_definition() == Some(unit_child) {

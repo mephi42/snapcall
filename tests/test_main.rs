@@ -12,11 +12,20 @@ mod test {
 
     #[test]
     fn test0001() {
+        test("test0001");
+    }
+
+    #[test]
+    fn test0002() {
+        test("test0002");
+    }
+
+    fn test(id: &str) {
         let work = TempDir::new().expect("TempDir::new() failed");
 
-        let h_path = work.path().join("test0001-snapshot.h");
+        let h_path = work.path().join(format!("{}-snapshot.h", id));
         let mut h = File::create(&h_path).expect(&format!("Could not create {:?}", &h_path));
-        let c_path = test_path("test0001.c");
+        let c_path = test_path(&format!("{}.c", id));
         match generate(&mut h, &c_path) {
             Ok(_) => {}
             Err(x) => panic!(x)
@@ -29,11 +38,12 @@ mod test {
             .arg("-I").arg(work.path())
             .arg("-Wall")
             .arg("-Werror")
-            .arg(test_path("test0001-main.c"))
+            .arg(&c_path)
+            .arg(test_path(&format!("{}-main.c", id)))
             .spawn()
             .expect("Could not start clang");
         assert!(clang_main.wait().expect("Could not wait for clang").success());
-        let r_path = work.path().join("test0001-replay.h");
+        let r_path = work.path().join(format!("{}-replay.h", id));
         let r = File::create(&r_path).expect(&format!("Could not create {:?}", &r_path));
         let mut main = Command::new(&main_path)
             .stdout(Stdio::from(r))
@@ -47,8 +57,8 @@ mod test {
             .arg("-I").arg(work.path())
             .arg("-Wall")
             .arg("-Werror")
-            .arg(c_path)
-            .arg(test_path("test0001-replay.c"))
+            .arg(&c_path)
+            .arg(test_path(&format!("{}-replay.c", id)))
             .spawn()
             .expect("Could not start clang");
         assert!(clang_replay.wait().expect("Could not wait for clang").success());

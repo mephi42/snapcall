@@ -1,4 +1,4 @@
-# snapshot-call
+# snapcall
 
 ## Synopsis
 
